@@ -21,7 +21,7 @@ print("_______________________")
 def label_int2str(row):
     return emotions["train"].features["label"].int2str(row)
 
-df = d.to_pandas()
+df = emotions["train"].to_pandas()
 
 df["label_name"] = df["label"].apply(label_int2str)
 df.head()
