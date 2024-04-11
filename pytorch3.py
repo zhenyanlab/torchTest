@@ -1,8 +1,15 @@
 import numpy
+import numpy as np
+import pandas as pd
 import  torch
 from datasets import load_dataset
 from transformers import  AutoModel
 from transformers import AutoTokenizer as tokenizer
+
+
+import umap
+from sklearn.preprocessing import MinMaxScaler
+
 
 def print_type_structure(obj, indent=0):
     if isinstance(obj, numpy.ndarray):
@@ -30,8 +37,8 @@ def tokenize_function(examples):
     return tokenizer(examples["text"], padding="max_length", truncation=True)
 
 
+# RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu! (when checking argument for argument index in method wrapper_CUDA__index_select)
 
-model_ckpt = AutoModel.from_pretrained("bert-base-uncased")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f'GPU OR CPU: {device}')
 model = AutoModel.from_pretrained("bert-base-uncased")
@@ -59,13 +66,13 @@ print("@@@@@@@@@@@@@@@@@@@@@@")
 # 加载情感数据集
 emotions = load_dataset("emotion")
 emotions = emotions["train"]
-emotions = emotions.select(range(1000))
+emotions = emotions.select(range(10))
 
 # emotions.set_format("panda")
 # print_type_structure(emotions)
 # tokenizer(emotions["train"][:]["text"], return_tensors="pt", padding=True, truncation=True, max_length=512)
 # print_type_structure(emotions)
-emotions_encoded=emotions.map(tokenize_function, batched=True, batch_size=None)
+emotions_encoded = emotions.map(tokenize_function, batched=True, batch_size=None)
 print_type_structure(emotions_encoded)
 print("^^^^^^^^^^^^")
 emotions_encoded.set_format(type="torch", columns=["attention_mask","input_ids", "label"])
@@ -78,3 +85,13 @@ emotions_encoded=emotions_encoded.remove_columns(["label"])
 emotions_encoded = emotions_encoded.map(export_hidden_states, batched=True)
 print_type_structure(emotions_encoded)
 print(emotions_encoded.column_names)
+
+
+x_train = np.array(emotions_encoded["hidden_state"])
+x_scaled = MinMaxScaler().fit_transform(x_train)
+xumap = umap.UMAP(n_components=2).fit(x_scaled)
+df_train_umap = pd.DataFrame(xumap.embedding_, columns=["x", "y"])
+df_train_umap["label"] = np.array(emotions["label"])
+print(df_train_umap.head(10))
+
+# pip install umap-learn
