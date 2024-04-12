@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy
 import numpy as np
 import pandas as pd
@@ -9,7 +10,7 @@ from transformers import AutoTokenizer as tokenizer
 
 import umap
 from sklearn.preprocessing import MinMaxScaler
-
+import matplotlib.pyplot as plt
 
 def print_type_structure(obj, indent=0):
     if isinstance(obj, numpy.ndarray):
@@ -66,7 +67,7 @@ print("@@@@@@@@@@@@@@@@@@@@@@")
 # 加载情感数据集
 emotions = load_dataset("emotion")
 emotions = emotions["train"]
-emotions = emotions.select(range(10))
+emotions = emotions.select(range(150))
 
 # emotions.set_format("panda")
 # print_type_structure(emotions)
@@ -87,6 +88,9 @@ print_type_structure(emotions_encoded)
 print(emotions_encoded.column_names)
 
 
+# pip install umap-learn
+# pip install scikit-learn
+
 x_train = np.array(emotions_encoded["hidden_state"])
 x_scaled = MinMaxScaler().fit_transform(x_train)
 xumap = umap.UMAP(n_components=2).fit(x_scaled)
@@ -94,4 +98,11 @@ df_train_umap = pd.DataFrame(xumap.embedding_, columns=["x", "y"])
 df_train_umap["label"] = np.array(emotions["label"])
 print(df_train_umap.head(10))
 
-# pip install umap-learn
+fig,axes = plt.subplots(2,3,figsize=(10,10))
+axes = axes.flatten()
+for i, label in enumerate(df_train_umap["label"].unique()):
+    print(f"label == {label},i={i},axes={axes}")
+    df_train_umap_label = df_train_umap.query(f"label == {label}")
+    axes[i].hexbin(df_train_umap_label["x"], df_train_umap_label["y"], label=label,gridsize=20,linewidths=(0,))
+
+plt.show()
