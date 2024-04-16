@@ -31,12 +31,14 @@ def tokenize_function(examples):
 print("@@@@@@@@@@@@@@@@@@@@@@")
 emotions = load_dataset("emotion")
 emotions_train = emotions["train"]
+emotions_train = emotions_train.shuffle()
 # emotions_train = emotions_train.select(range(300))
 # trainout = exec2(emotions_train)
 trainout = emotions_train.map(tokenize_function, batched=True, batch_size=100)
 print("@@@@@@@@@@@@@@@@@@@@@@")
 
 emotions_validation = emotions["validation"]
+emotions_validation = emotions_validation.shuffle()
 # emotions_validation = emotions_validation.select(range(300))
 # validationout = exec2(emotions_validation)
 validationout = emotions_validation.map(tokenize_function, batched=True, batch_size=100)
@@ -56,7 +58,7 @@ logging_steps = len(emotions_train) // batch_size
 print(f"logging_steps:{logging_steps}")
 model_name =f"{model_ckpt}-finetuned-emotions-shixm"
 train_args = TrainingArguments(output_dir=model_name,
-                               num_train_epochs=5,
+                               num_train_epochs=500,
                                learning_rate=2e-5,
                                per_device_train_batch_size=batch_size,
                                per_device_eval_batch_size=batch_size,
@@ -74,3 +76,7 @@ trainer = Trainer(model=model, args=train_args, compute_metrics=compute_metrics,
 trainer.train()
 # // 保存模型和tokenizer,以便以后推理加载的时候使用
 tokenizer.save_pretrained(model_name)
+trainer.save_model(model_name)
+trainer.push_to_hub()
+
+# tensorboard --logdir=./logss

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import torch
 from datasets import load_dataset
-from transformers import  AutoModel
+from transformers import AutoModel, AutoModelForSequenceClassification
 from transformers import AutoTokenizer
 
 
@@ -20,6 +20,7 @@ rcParams['axes.unicode_minus'] = False  # 解决负号'-'显示为方块的问�
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.dummy import DummyClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 def print_type_structure(obj, indent=0):
     if isinstance(obj, np.ndarray):
@@ -37,37 +38,9 @@ def print_type_structure(obj, indent=0):
             print_type_structure(value, indent + 8)
     else:
         print(' ' * indent + f'Type: {type(obj).__name__}')
-def export_hidden_states(batch):
-    # inputs = {k:v.to(device)for k,v in batch.items()}
-    inputs = {k: v for k, v in batch.items()}
-    with torch.no_grad():
-        last_hidden_states = model(**inputs).last_hidden_state
-    return {"hidden_state":last_hidden_states[:,0].cpu().numpy()}
-def tokenize_function(examples):
-    return tokenizer(examples["text"], padding="max_length", truncation=True)
 
 
 
-def exec2(emotions):
-    emotions_encoded = emotions.map(tokenize_function, batched=True, batch_size=100)
-    print_type_structure(emotions_encoded)
-    print("^^^^^^^^^^^^")
-    emotions_encoded.set_format(type="torch", columns=["attention_mask","input_ids", "label"])
-    print_type_structure(emotions_encoded)
-
-    # emotions_encoded = emotions_encoded.select(["attention_mask","input_ids", "label"])
-    emotions_encoded=emotions_encoded.remove_columns(["text"])
-    tempLabel = emotions_encoded["label"]
-    emotions_encoded=emotions_encoded.remove_columns(["label"])
-
-    emotions_encoded = emotions_encoded.map(export_hidden_states, batched=True, batch_size=100)
-    emotions_encoded = emotions_encoded.add_column("label", emotions["label"])
-
-    print_type_structure(emotions_encoded)
-    print("emotions_encoded:" + str(emotions_encoded.column_names))
-    # emotions_encoded.add_column("label", tempLabel)
-
-    return emotions_encoded
 
 def showHex(emotions_encoded):
     x_train = np.array(emotions_encoded["hidden_state"])
@@ -100,50 +73,64 @@ def plot_confusion_matrix(y_preds,y_true,labels,title='Confusion matrix', cmap=p
     plt.show()
 
 
+def exec3(emotions):
+    model_ckpt = "distilbert/distilbert-base-uncased"
+    model_name = f"{model_ckpt}-finetuned-emotions-shixm"
+    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    label_pre = []
+    label_val = []
+    for i in emotions:
+        inputs = tokenizer(i["text"], return_tensors="pt", padding=True, truncation=True)
+        with torch.no_grad():
+            outputs = model(**inputs)
+        predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+        max = torch.argmax(predictions,1)
+        label_pre.append(max.item())
+        label_val.append(i["label"])
+    return label_pre,label_val
+
+def plot_confusion_matrix(y_preds,y_true,labels,title='Confusion matrix', cmap=plt.cm.Blues):
+    from sklearn.metrics import confusion_matrix,ConfusionMatrixDisplay
+    cm = confusion_matrix(y_true, y_preds,normalize="true")
+    fig,ax = plt.subplots(figsize=(8,8))
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm,display_labels=labels)
+    disp.plot(include_values=True,cmap=cmap, ax=ax,values_format='.2f',xticks_rotation=45)
+    plt.title(title)
+    plt.show()
+
+
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f'GPU OR CPU: {device}')
+    map_label = {0: '悲伤', 1: '喜悦', 2: '爱', 3: '愤怒', 4: '恐惧', 5: '惊喜'}
 
     emotions = load_dataset("emotion")
     emotions_train = emotions["train"]
-    emotions_train = emotions_train.select(range(300))
+    emotions_train = emotions_train.select(range(2000))
     print("@@@@@@@@@@@@@@@@@@@@@@")
-    trainout = exec2(emotions_train)
+    trainout = exec3(emotions_train)
+    print(f"train-ken:{len(trainout[0])},validation-len{len(trainout[1])}")
+    accuracy = accuracy_score(trainout[0], trainout[1])
+    print(f'train~~~Accuracy: {accuracy:.4f}')
+    plot_confusion_matrix(trainout[0],trainout[1],map_label.values(),title="Confusion matrix (normalized)",cmap=plt.cm.Greens)
+
+    # print_type_structure(trainout)
     # break run
     # showHex(trainout)
     print("@@@@@@@@@@@@@@@@@@@@@@")
 
     emotions_validation = emotions["validation"]
-    emotions_validation = emotions_validation.select(range(300))
-    validationout = exec2(emotions_validation)
-    # break run
-    # showHex(validationout)
+    emotions_validation = emotions_validation.select(range(2000))
+    validationout = exec3(emotions_validation)
+    print("@@@@@@@@@@@@@@@@@@@@@@")
+    print(f"valid-ken:{len(validationout[0])},valid-len{len(validationout[1])}")
+    accuracy = accuracy_score(validationout[0], validationout[1])
+    print(f'valid***Accuracy: {accuracy:.4f}')
+    plot_confusion_matrix(validationout[0],validationout[1],map_label.values(),title="Confusion matrix (normalized)",cmap=plt.cm.Greens)
 
-    x_train= np.array(trainout["hidden_state"])
-    x_val = np.array(validationout["hidden_state"])
-    y_train = np.array(trainout["label"])
-    y_val = np.array(validationout["label"])
-    print(x_train.shape,x_val.shape,y_train.shape,y_val.shape)
-    lr_clf = LogisticRegression()
-    # 使用训练数据拟合模型
-    lr_clf.fit(x_train,y_train)
-    # 方法默认计算的是分类准确率（accuracy）
-    print(lr_clf.score(x_val,y_val))
 
-    dummy_clf = DummyClassifier(strategy="most_frequent")
-    dummy_clf.fit(x_train,y_train)
-    print(dummy_clf.score(x_val,y_val))
-    map_label = {0: '悲伤', 1: '喜悦', 2: '爱', 3: '愤怒', 4: '恐惧', 5: '惊喜'}
-    # 训练结果
-    y_preds = lr_clf.predict(x_val)
-    #验证结果
-    # y_val
-    plot_confusion_matrix(y_preds,y_val,map_label.values(),title="Confusion matrix (normalized)",cmap=plt.cm.Greens)
-
-model = AutoModel.from_pretrained("bert-base-uncased")
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 if __name__ == '__main__':
-
     main()
     # requests.exceptions.SSLError: (MaxRetryError(
     #     "HTTPSConnectionPool(host='huggingface.co', port=443): Max retries exceeded with url: /bert-base-uncased/resolve/main/config.json (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1006)')))"),
