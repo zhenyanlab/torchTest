@@ -67,7 +67,7 @@ print("@@@@@@@@@@@@@@@@@@@@@@")
 # 加载情感数据集
 emotions = load_dataset("emotion")
 emotions = emotions["train"]
-emotions = emotions.select(range(150))
+emotions = emotions.select(range(450))
 
 # emotions.set_format("panda")
 # print_type_structure(emotions)
@@ -90,6 +90,11 @@ print(emotions_encoded.column_names)
 
 # pip install umap-learn
 # pip install scikit-learn
+from matplotlib import rcParams
+
+# 设置字体为支持中文的字体
+rcParams['font.sans-serif'] = ['Microsoft YaHei']
+rcParams['axes.unicode_minus'] = False  # 解决负号'-'显示为方块的问题
 
 x_train = np.array(emotions_encoded["hidden_state"])
 x_scaled = MinMaxScaler().fit_transform(x_train)
@@ -97,12 +102,16 @@ xumap = umap.UMAP(n_components=2).fit(x_scaled)
 df_train_umap = pd.DataFrame(xumap.embedding_, columns=["x", "y"])
 df_train_umap["label"] = np.array(emotions["label"])
 print(df_train_umap.head(10))
-
+map_label = {0:'悲伤',1:'喜悦',2:'爱',3:'愤怒',4:'恐惧',5:'惊喜'}
+cmaps = ["Greens","Blues","Reds","Purples","Oranges","Greys"]
 fig,axes = plt.subplots(2,3,figsize=(10,10))
 axes = axes.flatten()
-for i, label in enumerate(df_train_umap["label"].unique()):
+print(emotions.features["label"])
+
+for i, (label,cmap) in enumerate(zip(df_train_umap["label"].unique(),cmaps)):
     print(f"label == {label},i={i},axes={axes}")
     df_train_umap_label = df_train_umap.query(f"label == {label}")
-    axes[i].hexbin(df_train_umap_label["x"], df_train_umap_label["y"], label=label,gridsize=20,linewidths=(0,))
+    axes[i].hexbin(df_train_umap_label["x"], df_train_umap_label["y"], label=label,gridsize=20,linewidths=(0,),cmap=cmap)
+    axes[i].set_title(map_label[label])
 
 plt.show()
